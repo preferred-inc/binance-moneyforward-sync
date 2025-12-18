@@ -1,71 +1,115 @@
 # Binance to MoneyForward Sync
 
-Binanceの暗号資産残高を日本円換算でマネーフォワードに自動同期するツールです。GitHub Actionsで完全無料で動作し、複数の暗号資産に対応しています。
+Binanceの暗号資産残高を日本円換算でマネーフォワードに自動同期するツールです。
 
 ## 特徴
 
-このツールは以下の特徴を持っています：
-
-- **完全無料**: GitHub Actionsで動作するため、追加コストなし
-- **複数通貨対応**: 設定ファイルで指定した複数の暗号資産を一括処理
-- **日本円換算**: Binance APIを使用してリアルタイムのJPYレートで換算
-- **自動同期**: 毎日指定時刻に自動実行（デフォルト: JST 23:00）
-- **エラーハンドリング**: 包括的なエラー処理とリトライ機構
-- **詳細なログ**: 実行状況を詳細に記録
+- **複数通貨対応**: BTC、ETH、SOL、USDTなど、Binanceで取引可能な全ての暗号資産に対応
+- **自動JPY換算**: 直接JPYペアまたはUSDT経由で自動的に日本円換算
+- **スケジュール実行**: Google Cloud Run Jobsで毎日自動実行
+- **完全無料**: Cloud Runの無料枠内で動作（月180万vCPU秒）
+- **エラーハンドリング**: リトライ機構と詳細なログ出力
 
 ## アーキテクチャ
 
-このシステムはGitHub上で以下のコンポーネントを使用して構築されています：
+```
+┌─────────────────────────────────────────┐
+│      Google Cloud Run Jobs              │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │    Docker Container               │ │
+│  │  ┌─────────────┐  ┌────────────┐ │ │
+│  │  │   main.py   │  │ config.yaml│ │ │
+│  │  └──────┬──────┘  └────────────┘ │ │
+│  │         │                         │ │
+│  │    ┌────┴────┐                   │ │
+│  │    │         │                   │ │
+│  │    ▼         ▼                   │ │
+│  │ ┌─────┐  ┌──────────┐           │ │
+│  │ │Binance│ │MoneyForward│         │ │
+│  │ │ API  │  │ Selenium │           │ │
+│  │ └─────┘  └──────────┘           │ │
+│  └───────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+         │                    │
+         ▼                    ▼
+    Binance API        MoneyForward Web
+```
 
-| コンポーネント | 説明 |
-|--------------|------|
-| **GitHub Actions** | スケジュール実行環境（完全無料） |
-| **GitHub Secrets** | 認証情報の安全な管理 |
-| **Python 3.11** | メインロジックの実装言語 |
-| **Selenium** | マネーフォワードの自動操作 |
-| **python-binance** | Binance API クライアント |
+## クイックスタート
 
-## 前提条件
+### 前提条件
 
-以下のアカウントとAPIキーが必要です：
-
-- GitHubアカウント
-- Binance API Key/Secret
+- Googleアカウント
+- Binance APIキー（読み取り専用権限）
 - マネーフォワードアカウント
+- マネーフォワードに作成済みの手動入力資産
 
-## セットアップ
+### セットアップ手順
 
-### 1. リポジトリのフォークまたはクローン
-
-このリポジトリをフォークするか、新しいリポジトリを作成してファイルをコピーします。
+1. **リポジトリをクローン**
 
 ```bash
-# 新規リポジトリを作成する場合
 git clone https://github.com/preferred-inc/binance-moneyforward-sync.git
 cd binance-moneyforward-sync
 ```
 
-### 2. GitHub Secretsの設定
+2. **Google Cloud プロジェクトを作成**
 
-リポジトリの Settings → Secrets and variables → Actions で以下のシークレットを追加します：
+[Google Cloud Console](https://console.cloud.google.com/)で新しいプロジェクトを作成
 
-| シークレット名 | 説明 | 例 |
-|--------------|------|-----|
-| `BINANCE_API_KEY` | Binance APIキー | `abc123...` |
-| `BINANCE_API_SECRET` | Binance APIシークレット | `xyz789...` |
-| `MONEYFORWARD_USER` | マネーフォワードのメールアドレス | `user@example.com` |
-| `MONEYFORWARD_PASSWORD` | マネーフォワードのパスワード | `your_password` |
+3. **gcloud CLIをインストール**
 
-#### Binance APIキーの取得方法
+```bash
+# macOS
+brew install --cask google-cloud-sdk
 
-1. [Binance](https://www.binance.com/)にログイン
-2. アカウント → API管理
-3. 新しいAPIキーを作成
-4. **重要**: 「読み取り専用」権限のみを有効化（セキュリティのため）
+# Linux
+curl https://sdk.cloud.google.com | bash
 
-### 3. 対象通貨の設定
+# 初期化
+gcloud init
+```
 
-`config.yaml`を編集して、同期したい暗号資産を設定します：
+4. **シークレットを設定**
+
+```bash
+./setup-secrets.sh
+```
+
+5. **デプロイ**
+
+`deploy.sh`を編集してプロジェクトIDを設定後：
+
+```bash
+./deploy.sh
+```
+
+6. **スケジュール実行を設定**
+
+詳細は[CLOUDRUN_SETUP.md](CLOUDRUN_SETUP.md)を参照
+
+## ファイル構成
+
+```
+binance-moneyforward-sync/
+├── main.py                   # メインスクリプト
+├── config.yaml               # 設定ファイル
+├── requirements.txt          # Python依存関係
+├── Dockerfile                # Docker設定
+├── .dockerignore             # Docker除外設定
+├── deploy.sh                 # デプロイスクリプト
+├── setup-secrets.sh          # シークレット設定スクリプト
+├── README.md                 # このファイル
+├── CLOUDRUN_SETUP.md         # 詳細セットアップガイド
+└── .env.example              # 環境変数サンプル
+```
+
+## 設定
+
+### config.yaml
+
+同期する暗号資産を設定：
 
 ```yaml
 assets:
@@ -75,6 +119,9 @@ assets:
   - symbol: ETH
     account_name: "Binance ETH"
   
+  - symbol: SOL
+    account_name: "Binance SOL"
+  
   - symbol: USDT
     account_name: "Binance USDT"
 
@@ -83,194 +130,136 @@ retry:
   delay_seconds: 60
 ```
 
-**注意**: `account_name`はマネーフォワードに登録されている口座名と一致させてください。
-
-### 4. マネーフォワードでの準備
-
-マネーフォワードに以下の手動入力資産を作成します：
-
-1. マネーフォワードにログイン
-2. 「資産」→「口座」→「金融機関を追加」
-3. 「その他」→「手動で資産を管理」を選択
-4. 各暗号資産用の口座を作成（例: "Binance BTC", "Binance ETH"）
-
-### 5. リポジトリにプッシュ
-
-変更をコミットしてGitHubにプッシュします：
-
-```bash
-git add .
-git commit -m "Initial setup"
-git push origin main
-```
-
-### 6. GitHub Actionsの有効化
-
-1. リポジトリの「Actions」タブを開く
-2. ワークフローを有効化
-3. 「Run workflow」ボタンで手動実行してテスト
+**注意**: `account_name`はマネーフォワードで作成した口座名と完全に一致させてください。
 
 ## 使い方
 
-### 自動実行
-
-デフォルトでは毎日JST 23:00（UTC 14:00）に自動実行されます。
-
-スケジュールを変更する場合は、`.github/workflows/sync.yml`のcron設定を編集します：
-
-```yaml
-schedule:
-  - cron: '0 14 * * *'  # UTC時刻で指定
-```
-
-**cron形式の例**:
-- `0 14 * * *`: 毎日14:00 UTC（JST 23:00）
-- `0 9 * * *`: 毎日09:00 UTC（JST 18:00）
-- `0 0 * * 1`: 毎週月曜日00:00 UTC
-
 ### 手動実行
 
-GitHub ActionsのUIから手動で実行できます：
+```bash
+gcloud run jobs execute binance-moneyforward-sync \
+    --region=asia-northeast1
+```
 
-1. リポジトリの「Actions」タブを開く
-2. 「Binance to MoneyForward Sync」ワークフローを選択
-3. 「Run workflow」ボタンをクリック
-
-### ローカル実行
-
-開発やテスト時にローカルで実行する場合：
+### ログ確認
 
 ```bash
-# 依存関係のインストール
-pip install -r requirements.txt
-
-# 環境変数を設定
-cp .env.example .env
-# .envファイルを編集して認証情報を入力
-
-# 実行
-python main.py
+# 最新の実行ログを表示
+gcloud logging read "resource.type=cloud_run_job" --limit=50
 ```
 
-## 設定
+### スケジュール変更
 
-### 対象通貨の追加
-
-`config.yaml`に新しいエントリを追加します：
-
-```yaml
-assets:
-  - symbol: BNB
-    account_name: "Binance BNB"
+```bash
+# 実行時刻を変更（例: 毎日22:00 JST）
+gcloud scheduler jobs update http binance-sync-scheduler \
+    --location=asia-northeast1 \
+    --schedule="0 22 * * *"
 ```
 
-対応している通貨はBinanceで取引可能な全ての暗号資産です。JPYペアが存在しない場合は、自動的にUSDT経由で換算されます。
+## 対応通貨
 
-### リトライ設定
+Binanceで取引可能な全ての暗号資産に対応しています。主な例：
 
-API呼び出しやブラウザ操作が失敗した場合のリトライ動作を設定できます：
+| Symbol | 名称 | JPY換算方法 |
+|--------|------|------------|
+| BTC | Bitcoin | 直接JPYペア |
+| ETH | Ethereum | 直接JPYペア |
+| USDT | Tether | 直接JPYペア |
+| SOL | Solana | USDT経由 |
+| BNB | Binance Coin | USDT経由 |
+| XRP | Ripple | USDT経由 |
+| ADA | Cardano | USDT経由 |
+| DOGE | Dogecoin | USDT経由 |
 
-```yaml
-retry:
-  max_attempts: 3      # 最大試行回数
-  delay_seconds: 60    # リトライ間隔（秒）
-```
+## コスト
 
-## トラブルシューティング
+### Google Cloud Run Jobs 無料枠
 
-### ログの確認
+- 月180万vCPU秒（約500時間）
+- 月360万GBメモリ秒
+- 月200万リクエスト
 
-GitHub Actionsの実行ログを確認します：
+### このツールの使用量（1日1回実行）
 
-1. リポジトリの「Actions」タブを開く
-2. 該当するワークフロー実行をクリック
-3. 「sync」ジョブのログを展開
-
-### よくある問題
-
-**問題**: マネーフォワードへのログインに失敗する
-
-**解決策**: 
-- GitHub Secretsの`MONEYFORWARD_USER`と`MONEYFORWARD_PASSWORD`が正しいか確認
-- マネーフォワードで2段階認証を有効にしている場合は無効化が必要
-- マネーフォワードのログイン画面のDOM構造が変更されている可能性があり、`main.py`の修正が必要な場合があります
-
-**問題**: Binance APIエラー
-
-**解決策**:
-- GitHub Secretsの`BINANCE_API_KEY`と`BINANCE_API_SECRET`が正しいか確認
-- Binance APIキーが有効で、読み取り権限があるか確認
-- APIの利用制限に達していないか確認
-
-**問題**: 口座が見つからない
-
-**解決策**:
-- `config.yaml`の`account_name`がマネーフォワードの口座名と完全に一致しているか確認
-- マネーフォワードで該当する手動入力資産が作成されているか確認
-
-**問題**: GitHub Actionsが実行されない
-
-**解決策**:
-- リポジトリの「Actions」タブでワークフローが有効になっているか確認
-- リポジトリがプライベートの場合、GitHub Actionsの実行時間制限を確認（無料プランは月2,000分まで）
-- `.github/workflows/sync.yml`が正しくコミットされているか確認
+- 実行時間: 約5-10分
+- vCPU: 1
+- メモリ: 1GB
+- **月間コスト: 無料枠内（$0）**
 
 ## セキュリティ
 
-このツールは機密情報を扱うため、以下のセキュリティ対策を実施しています：
+### Binance APIキー
 
-- **GitHub Secrets**: 認証情報は暗号化されて保存され、ログに出力されません
-- **読み取り専用API**: Binance APIは読み取り専用権限のみを使用
-- **ヘッドレスブラウザ**: Seleniumはヘッドレスモードで動作し、画面は表示されません
-- **最小権限**: 必要最小限の権限のみを使用
+以下の権限のみを有効にしてください：
 
-### セキュリティのベストプラクティス
+- ✅ **Enable Reading** (読み取り)
+- ❌ Enable Spot & Margin Trading (取引) - **無効**
+- ❌ Enable Futures (先物) - **無効**
+- ❌ Enable Withdrawals (出金) - **無効**
 
-1. **Binance APIキーは読み取り専用に設定**
-   - 取引権限は絶対に有効にしないでください
+### シークレット管理
 
-2. **定期的なパスワード変更**
-   - マネーフォワードのパスワードを定期的に変更し、GitHub Secretsも更新
+- Google Cloud Secret Managerで安全に管理
+- コードやログにシークレットを含めない
+- 定期的にAPIキーをローテーション
 
-3. **プライベートリポジトリの使用**
-   - 可能であればプライベートリポジトリを使用してください
+## トラブルシューティング
 
-4. **ログの確認**
-   - 定期的にGitHub Actionsのログを確認し、異常な動作がないかチェック
+### エラー: "Account not found"
+
+**原因**: マネーフォワードに該当する口座が存在しない
+
+**解決策**:
+1. マネーフォワードで手動入力資産を作成
+2. `config.yaml`の`account_name`が口座名と完全一致しているか確認
+
+### エラー: "Binance API error"
+
+**原因**: APIキーが無効または権限不足
+
+**解決策**:
+1. BinanceのAPI管理画面でAPIキーが有効か確認
+2. 「Enable Reading」権限が有効になっているか確認
+3. シークレットが正しく設定されているか確認
+
+### エラー: "Login failed"
+
+**原因**: マネーフォワードへのログインに失敗
+
+**解決策**:
+1. メールアドレスとパスワードが正しいか確認
+2. 2段階認証が無効になっているか確認
+3. マネーフォワードのログイン画面が変更されている可能性
+
+詳細は[CLOUDRUN_SETUP.md](CLOUDRUN_SETUP.md)のトラブルシューティングセクションを参照してください。
 
 ## 制限事項
 
-- **GitHub Actions実行時間**: 1回の実行は最大6時間まで（通常は数分で完了）
-- **プライベートリポジトリ**: 無料プランでは月2,000分まで（パブリックリポジトリは無制限）
-- **マネーフォワードのDOM変更**: マネーフォワードのWebサイト構造が変更された場合、コードの修正が必要になる可能性があります
+1. **マネーフォワード2段階認証**: 有効時は動作不可
+2. **DOM変更**: マネーフォワードのサイト変更時にコード修正が必要
+3. **実行時間**: 1回の実行は最大30分（通常は5-10分）
+
+## 今後の拡張案
+
+- [ ] 他の取引所対応（Coinbase、Kraken等）
+- [ ] 他の家計簿対応（Zaim、Moneytree等）
+- [ ] Slack/Discord通知
+- [ ] 履歴管理とグラフ化
+- [ ] Web UI
 
 ## ライセンス
 
-MIT License
-
-## 貢献
-
-プルリクエストを歓迎します。大きな変更の場合は、まずIssueを開いて変更内容を議論してください。
-
-### 開発ガイドライン
-
-1. コードスタイルはPEP 8に準拠
-2. 新機能には適切なログ出力を追加
-3. エラーハンドリングを適切に実装
-4. READMEを更新
+MIT License - 詳細は[LICENSE](LICENSE)を参照
 
 ## サポート
 
-問題が発生した場合は、GitHubのIssueを作成してください。以下の情報を含めると、より迅速に対応できます：
+問題が発生した場合は、[GitHub Issues](https://github.com/preferred-inc/binance-moneyforward-sync/issues)で報告してください。
 
-- エラーメッセージの全文
-- GitHub Actionsのログ（機密情報は削除してください）
-- 使用している設定（`config.yaml`の内容）
-- 期待される動作と実際の動作
+## 貢献
 
-## 関連リンク
+プルリクエストを歓迎します！大きな変更の場合は、まずIssueで議論してください。
 
-- [Binance API Documentation](https://binance-docs.github.io/apidocs/)
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Selenium Documentation](https://www.selenium.dev/documentation/)
-- [MoneyForward](https://moneyforward.com/)
+---
+
+**注意**: このツールは非公式であり、Binanceやマネーフォワードとは関係ありません。自己責任でご使用ください。
