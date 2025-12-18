@@ -1,0 +1,58 @@
+name: Binance to MoneyForward Sync
+
+on:
+  # スケジュール実行（毎日JST 23:00 = UTC 14:00）
+  schedule:
+    - cron: '0 14 * * *'
+  
+  # 手動実行を許可
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+      
+      - name: Install ChromeDriver
+        uses: nanasess/setup-chromedriver@v2
+      
+      - name: Create Chrome profile directory
+        run: mkdir -p /tmp/chrome-profile
+      
+      - name: Run sync
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+          MONEYFORWARD_USER: ${{ secrets.MONEYFORWARD_USER }}
+          MONEYFORWARD_PASSWORD: ${{ secrets.MONEYFORWARD_PASSWORD }}
+          CHROME_PROFILE_PATH: /tmp/chrome-profile
+          CONFIG_PATH: config.yaml
+        run: python main.py
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs
+          path: |
+            *.log
+          retention-days: 7

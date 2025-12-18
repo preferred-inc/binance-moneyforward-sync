@@ -1,0 +1,17 @@
+# Binance to MoneyForward Sync Configuration
+
+# 同期する資産のリスト
+assets:
+  - symbol: BTC
+    account_name: "Binance BTC"
+  
+  - symbol: ETH
+    account_name: "Binance ETH"
+  
+  - symbol: USDT
+    account_name: "Binance USDT"
+
+# リトライ設定
+retry:
+  max_attempts: 3
+  delay_seconds: 60
