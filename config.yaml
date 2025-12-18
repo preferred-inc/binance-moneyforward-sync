@@ -8,6 +8,9 @@ assets:
   - symbol: ETH
     account_name: "Binance ETH"
   
+  - symbol: SOL
+    account_name: "Binance SOL"
+  
   - symbol: USDT
     account_name: "Binance USDT"
 
